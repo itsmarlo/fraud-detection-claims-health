@@ -109,6 +109,7 @@ commit only `.env.example`.
 
 Useful URLs:
 
+- Review console: `http://localhost:8000/`
 - Swagger UI: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
 

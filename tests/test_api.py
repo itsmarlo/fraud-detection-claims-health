@@ -10,6 +10,23 @@ def test_health_check():
     assert response.json()["status"] == "ok"
 
 
+def test_review_console_is_served():
+    client = TestClient(app)
+
+    page = client.get("/")
+    stylesheet = client.get("/static/fiori.css")
+    script = client.get("/static/app.js")
+    logo = client.get("/static/sap-fioneer-logo.svg")
+    font = client.get("/static/BentonSans-Regular.woff2")
+
+    assert page.status_code == 200
+    assert "Claim Review Console" in page.text
+    assert stylesheet.status_code == 200
+    assert script.status_code == 200
+    assert logo.status_code == 200
+    assert font.status_code == 200
+
+
 def test_score_endpoint():
     payload = {
         "claim_id": "CLM-API-1",

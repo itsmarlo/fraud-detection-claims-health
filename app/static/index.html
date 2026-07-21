@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Explainable healthcare FWA claim review console.">
+    <title>Claim Review Console</title>
+    <link rel="stylesheet" href="/static/fiori.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Claim Review Console home">
+        <img class="brand-logo" src="/static/sap-fioneer-logo.svg" alt="SAP Fioneer">
+        <span class="brand-divider" aria-hidden="true"></span>
+        <span class="app-identity">
+          <strong>Payment Integrity</strong>
+          <small>FWA Review Workspace</small>
+        </span>
+        <span class="prototype-badge">Prototype</span>
+      </a>
+      <div class="shell-actions">
+        <div class="service-state"><span class="state-dot"></span> Rules service ready</div>
+        <span class="shell-divider"></span>
+        <button class="shell-button" type="button" aria-label="Notifications">●</button>
+        <span class="user-avatar" aria-label="Current user">MA</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Payment Integrity / Claim Review</p>
+          <h1>Healthcare Claim Assessment</h1>
+          <p class="lede">Evaluate a claim with explainable rules and trace each review signal to its source field.</p>
+          <div class="object-meta"><span>Rules-based assessment</span><span>Human review workflow</span><span>Versioned evidence</span></div>
+        </div>
+        <aside class="safety-note">
+          <span class="safety-icon" aria-hidden="true">✓</span>
+          <div><strong>Human decision required</strong><p>This service prioritizes review. It never denies care, reimbursement, or determines fraud.</p></div>
+        </aside>
+      </section>
+
+      <section class="workspace">
+        <article class="panel input-panel">
+          <div class="panel-head">
+            <div><p class="step">Claim context</p><h2>Assessment Input</h2></div>
+            <div class="preset-group" aria-label="Sample claims">
+              <button class="quiet-button" type="button" id="routine-sample">Routine sample</button>
+              <button class="quiet-button" type="button" id="priority-sample">Priority sample</button>
+            </div>
+          </div>
+
+          <form id="claim-form">
+            <fieldset>
+              <legend>Identifiers</legend>
+              <div class="form-grid three">
+                <label>Claim ID<input id="claim_id" required minlength="3" value="CLM-1001"></label>
+                <label>Member ID<input id="member_id" required minlength="3" value="MBR-1234"></label>
+                <label>Provider ID<input id="provider_id" required minlength="3" value="NPI-456789"></label>
+                <label>Policy ID<input id="policy_id" required minlength="3" value="POL-9001"></label>
+                <label>Claim type<select id="claim_type"><option>OUT_PATIENT</option><option>IN_PATIENT</option><option>DENTAL</option><option selected>HOSPITAL</option></select></label>
+                <label>Service category<select id="cause_of_loss"><option>ROUTINE_CONSULTATION</option><option selected>ELECTIVE_PROCEDURE</option><option>EMERGENCY_TREATMENT</option><option>CHRONIC_CONDITION</option><option>DIAGNOSTIC_TEST</option><option>PHARMACY</option><option>DENTAL_TREATMENT</option><option>OTHER</option></select></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Amounts and dates</legend>
+              <div class="form-grid three">
+                <label>Claim amount<input id="claim_amount" type="number" min="0" step="0.01" value="7500" required></label>
+                <label>Billed amount<input id="billed_amount" type="number" min="0" step="0.01" value="8200" required></label>
+                <label>Allowed amount<input id="allowed_amount" type="number" min="0" step="0.01" value="6000" required></label>
+                <label>Policy start<input id="policy_start_date" type="date" value="2026-01-01" required></label>
+                <label>Policy end<input id="policy_end_date" type="date" value="2026-12-31" required></label>
+                <label>Service date<input id="date_of_loss" type="date" value="2026-01-18" required></label>
+                <label>Submitted<input id="claim_submission_date" type="date" value="2026-01-25" required></label>
+                <label>Coverage upgraded<input id="coverage_upgrade_date" type="date" value="2026-01-05"></label>
+                <label>Beneficiary added<input id="beneficiary_added_date" type="date" value="2026-01-03"></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Clinical and provider context</legend>
+              <div class="form-grid three">
+                <label>Diagnosis codes<input id="diagnosis_codes" value="M54.5" placeholder="Comma separated"></label>
+                <label>Procedure codes<input id="procedure_codes" value="99285, 72148" placeholder="Comma separated"></label>
+                <label>Provider specialty<input id="provider_specialty" value="Orthopedics"></label>
+                <label>Previous claims · 12 mo<input id="previous_claims_last_12_months" type="number" min="0" value="4"></label>
+                <label>Provider review history · 12 mo<input id="provider_suspicious_claims_last_12_months" type="number" min="0" value="5"></label>
+                <label>Peer volume percentile<input id="provider_peer_volume_percentile" type="number" min="0" max="100" step="0.1" value="99.4"></label>
+              </div>
+              <div class="check-grid">
+                <label class="check"><input id="diagnosis_procedure_mismatch" type="checkbox" checked><span>Diagnosis/procedure mismatch</span></label>
+                <label class="check"><input id="provider_specialty_mismatch" type="checkbox"><span>Specialty/service mismatch</span></label>
+                <label class="check"><input id="newly_added_beneficiary" type="checkbox"><span>New beneficiary indicator</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Evidence quality</legend>
+              <div class="check-grid evidence-checks">
+                <label class="check"><input id="hospital_bill" type="checkbox" checked><span>Hospital bill</span></label>
+                <label class="check"><input id="discharge_summary" type="checkbox"><span>Discharge summary</span></label>
+                <label class="check"><input id="medical_report" type="checkbox"><span>Medical report</span></label>
+                <label class="check"><input id="lab_or_test_results" type="checkbox"><span>Test results</span></label>
+                <label class="check"><input id="duplicate_document_found" type="checkbox" checked><span>Duplicate detected</span></label>
+                <label class="check"><input id="low_resolution_image" type="checkbox" checked><span>Low-resolution evidence</span></label>
+              </div>
+              <div class="form-grid three evidence-dates">
+                <label>Treatment date<input id="treatment_date" type="date" value="2026-01-18"></label>
+                <label>Admission date<input id="admission_date" type="date" value="2026-01-18"></label>
+                <label>Discharge date<input id="discharge_date" type="date" value="2026-01-17"></label>
+              </div>
+            </fieldset>
+
+            <div class="form-actions">
+              <button class="primary-button" type="submit"><span>Run assessment</span><span aria-hidden="true">→</span></button>
+              <p>Deterministic rules · no external AI required</p>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel result-panel" id="result-panel" aria-live="polite">
+          <div class="empty-result" id="empty-result">
+            <div class="empty-orbit"><span></span></div>
+            <p class="step">02 · Review priority</p>
+            <h2>Assessment will appear here</h2>
+            <p>Run the claim to see its review tier, confidence, evidence-backed reasons, and recommended next action.</p>
+          </div>
+
+          <div class="assessment hidden" id="assessment">
+            <div class="result-heading">
+            <div><p class="step">Review priority</p><h2 id="result-claim-id">Claim</h2></div>
+              <span class="tier-badge" id="tier-badge">Priority</span>
+            </div>
+            <div class="score-row">
+              <div class="score-ring" id="score-ring"><div><strong id="risk-score">0</strong><span>risk score</span></div></div>
+              <div class="score-copy"><span>Recommended action</span><strong id="recommended-action"></strong><p id="version-line"></p></div>
+            </div>
+            <div class="confidence-card">
+              <div><span>Evidence confidence</span><strong id="confidence-score">0%</strong></div>
+              <div class="confidence-track"><span id="confidence-bar"></span></div>
+              <p>Confidence reflects evidence completeness and quality—not likelihood of fraud.</p>
+            </div>
+
+            <section class="result-section">
+              <div class="section-title"><h3>Why it was prioritized</h3><span id="reason-count">0 signals</span></div>
+              <div class="reason-list" id="reason-list"></div>
+            </section>
+
+            <section class="result-section">
+              <div class="section-title"><h3>Component scores</h3></div>
+              <div class="component-list" id="component-list"></div>
+            </section>
+
+            <section class="result-section hidden" id="warnings-section">
+              <div class="section-title"><h3>Evidence warnings</h3></div>
+              <ul class="warning-list" id="warning-list"></ul>
+            </section>
+          </div>
+
+          <div class="error-state hidden" id="error-state"><strong>Assessment could not be completed</strong><p id="error-message"></p></div>
+        </article>
+      </section>
+    </main>
+
+    <footer><span>FWA Review Console</span><span>Decision support · Human review required</span></footer>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
