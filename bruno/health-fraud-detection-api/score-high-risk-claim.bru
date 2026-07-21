@@ -1,0 +1,78 @@
+meta {
+  name: Score High-Risk Claim
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/healthcare-claims/assess
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "claim_id": "{{CLAIM_ID}}",
+    "policy_id": "POL-9001",
+    "member_id": "MBR-1234",
+    "claimant_id": "MBR-1234",
+    "provider_id": "NPI-456789",
+    "doctor_id": "DOC-4400",
+    "facility_id": "HOSP-7788",
+    "claim_type": "HOSPITAL",
+    "cause_of_loss": "ELECTIVE_PROCEDURE",
+    "claim_amount": 7500,
+    "billed_amount": 8200,
+    "allowed_amount": 6000,
+    "policy_start_date": "2026-01-01",
+    "policy_end_date": "2026-12-31",
+    "date_of_loss": "2026-01-18",
+    "claim_submission_date": "2026-01-25",
+    "coverage_upgrade_date": "2026-01-05",
+    "beneficiary_added_date": "2026-01-03",
+    "previous_claims_last_12_months": 4,
+    "active_policy_count": 2,
+    "provider_claims_last_90_days": 62,
+    "provider_peer_volume_percentile": 99.4,
+    "provider_suspicious_claims_last_12_months": 5,
+    "same_doctor_or_hospital_claims_last_12_months": 9,
+    "patient_age": 42,
+    "patient_gender": "F",
+    "diagnosis_codes": ["M54.5"],
+    "procedure_codes": ["99285", "72148"],
+    "provider_specialty": "Orthopedics",
+    "place_of_service": "Hospital",
+    "diagnosis_procedure_mismatch": true,
+    "high_value_claim": true,
+    "documents": {
+      "hospital_bill": true,
+      "discharge_summary": false,
+      "prescription": false,
+      "medical_report": false,
+      "lab_or_test_results": false,
+      "low_resolution_image": true,
+      "duplicate_document_found": true,
+      "doctor_name": "Dr. Example",
+      "hospital_name": "Central Hospital",
+      "invoice_number": "INV-4455",
+      "medical_report_date": "2026-01-20",
+      "treatment_date": "2026-01-18",
+      "admission_date": "2026-01-18",
+      "discharge_date": "2026-01-17"
+    }
+  }
+}
+
+tests {
+  test("high-risk claim is scored", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().claim_id).to.equal(bru.getEnvVar("CLAIM_ID"));
+    expect(res.getBody().risk_tier).to.equal("URGENT_REVIEW_PRIORITY");
+    expect(res.getBody().risk_score).to.be.greaterThan(80);
+    expect(res.getBody().assessment_purpose).to.equal("HUMAN_REVIEW_DECISION_SUPPORT");
+  });
+}

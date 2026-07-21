@@ -36,8 +36,9 @@ def base_claim(**overrides):
 def test_low_risk_claim_scores_low():
     assessment = HealthFraudDetectionAgent().assess(base_claim())
 
-    assert assessment.risk_level == RiskLevel.LOW
-    assert assessment.fraud_score <= 30
+    assert assessment.risk_tier == RiskLevel.LOW
+    assert assessment.risk_score <= 30
+    assert assessment.assessment_purpose == "HUMAN_REVIEW_DECISION_SUPPORT"
 
 
 def test_early_claim_under_30_days_is_high_eligibility_signal():
@@ -71,6 +72,7 @@ def test_document_validation_detects_duplicates_and_invalid_dates():
     assert "DUPLICATE_HEALTH_DOCUMENT" in codes
     assert "INVALID_ADMISSION_DISCHARGE_DATES" in codes
     assert assessment.component_scores.document_validation == 100
+    assert all(reason.evidence_refs for reason in assessment.reasons)
 
 
 def test_policy_and_beneficiary_risk_rules():
@@ -85,3 +87,45 @@ def test_policy_and_beneficiary_risk_rules():
     assert "CLAIM_AFTER_COVERAGE_UPGRADE" in codes
     assert "NEW_BENEFICIARY_HIGH_VALUE_CLAIM" in codes
     assert assessment.component_scores.policy_beneficiary == 100
+
+
+def test_high_cost_or_service_type_is_not_a_risk_signal_by_itself():
+    claim = base_claim(
+        claim_type=ClaimType.HOSPITAL,
+        cause_of_loss=CauseOfLoss.ELECTIVE_PROCEDURE,
+        claim_amount=15000,
+    )
+
+    assessment = HealthFraudDetectionAgent().assess(claim)
+
+    codes = {reason.code for reason in assessment.reasons}
+    assert "HIGH_VALUE_HOSPITAL_CLAIM" not in codes
+    assert "HIGH_RISK_CAUSE_OF_LOSS" not in codes
+
+
+def test_missing_or_low_quality_evidence_lowers_confidence_not_risk():
+    claim = base_claim(
+        documents=DocumentValidationInput(hospital_bill=False, low_resolution_image=True)
+    )
+
+    assessment = HealthFraudDetectionAgent().assess(claim)
+
+    assert assessment.component_scores.document_validation == 0
+    assert assessment.confidence_score < 100
+    assert assessment.warnings
+
+
+def test_demographic_flag_is_not_used_as_a_fraud_signal():
+    assessment = HealthFraudDetectionAgent().assess(base_claim(demographic_mismatch=True))
+
+    assert "DEMOGRAPHIC_MISMATCH" not in {reason.code for reason in assessment.reasons}
+
+
+def test_raw_provider_volume_requires_peer_context():
+    raw_only = HealthFraudDetectionAgent().assess(base_claim(provider_claims_last_90_days=10000))
+    peer_adjusted = HealthFraudDetectionAgent().assess(
+        base_claim(provider_claims_last_90_days=10000, provider_peer_volume_percentile=99.5)
+    )
+
+    assert "PROVIDER_PEER_VOLUME_OUTLIER" not in {reason.code for reason in raw_only.reasons}
+    assert "PROVIDER_PEER_VOLUME_OUTLIER" in {reason.code for reason in peer_adjusted.reasons}

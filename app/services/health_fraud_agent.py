@@ -1,5 +1,6 @@
 from datetime import date
 
+from app.core.config import Settings, get_settings
 from app.core.risk import RiskLevel, recommended_action_for_level, risk_level_for_score
 from app.models.health_claim_schema import (
     CauseOfLoss,
@@ -8,33 +9,53 @@ from app.models.health_claim_schema import (
     ComponentScores,
     HealthClaimInput,
     HealthFraudAssessment,
+    ReasonSeverity,
     RiskReason,
 )
 
 
 class HealthFraudDetectionAgent:
-    """Explainable rules agent for health claim fraud assessment."""
+    """Explainable rules service for healthcare FWA review prioritization."""
 
-    COMPONENT_WEIGHTS = {
-        "eligibility": 0.20,
-        "member_history": 0.18,
-        "incident_type": 0.12,
-        "document_validation": 0.25,
-        "provider_network": 0.15,
-        "policy_beneficiary": 0.10,
+    EVIDENCE_REFS = {
+        "TREATMENT_BEFORE_POLICY_INCEPTION": [
+            "claim.date_of_loss",
+            "claim.policy_start_date",
+            "documents.treatment_date",
+        ],
+        "EARLY_CLAIM_AFTER_POLICY_START": ["claim.date_of_loss", "claim.policy_start_date"],
+        "COVERAGE_INACTIVE_ON_SERVICE_DATE": ["claim.date_of_loss", "claim.policy_end_date"],
+        "EXCESSIVE_CLAIM_FREQUENCY": ["claim.previous_claims_last_12_months"],
+        "MULTIPLE_ACTIVE_POLICIES": ["claim.active_policy_count"],
+        "DUPLICATE_HEALTH_DOCUMENT": ["documents.duplicate_document_found"],
+        "DOCUMENT_DATE_MISMATCH": ["documents.medical_report_date", "documents.treatment_date"],
+        "INVALID_ADMISSION_DISCHARGE_DATES": [
+            "documents.admission_date",
+            "documents.discharge_date",
+        ],
+        "SUSPICIOUS_HOSPITAL_DOCTOR_REPETITION": [
+            "claim.same_doctor_or_hospital_claims_last_12_months"
+        ],
+        "HIGH_RISK_PROVIDER_HISTORY": ["claim.provider_suspicious_claims_last_12_months"],
+        "PROVIDER_PEER_VOLUME_OUTLIER": [
+            "claim.provider_claims_last_90_days",
+            "claim.provider_peer_volume_percentile",
+        ],
+        "PROCEDURE_DIAGNOSIS_MISMATCH": ["claim.diagnosis_codes", "claim.procedure_codes"],
+        "PROVIDER_SPECIALTY_MISMATCH": ["claim.provider_specialty", "claim.procedure_codes"],
+        "CLAIM_AFTER_COVERAGE_UPGRADE": ["claim.coverage_upgrade_date", "claim.date_of_loss"],
+        "NEW_BENEFICIARY_HIGH_VALUE_CLAIM": [
+            "claim.beneficiary_added_date",
+            "claim.claim_amount",
+        ],
+        "POLICY_MODIFIED_SHORTLY_BEFORE_CLAIM": [
+            "claim.last_policy_modification_date",
+            "claim.date_of_loss",
+        ],
     }
 
-    HIGH_RISK_CAUSES = {
-        CauseOfLoss.ELECTIVE_PROCEDURE,
-        CauseOfLoss.DENTAL_TREATMENT,
-        CauseOfLoss.PHARMACY,
-    }
-
-    MEDIUM_RISK_CAUSES = {
-        CauseOfLoss.DIAGNOSTIC_TEST,
-        CauseOfLoss.CHRONIC_CONDITION,
-        CauseOfLoss.ROUTINE_CONSULTATION,
-    }
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or get_settings()
 
     def assess(self, claim: HealthClaimInput) -> HealthFraudAssessment:
         reasons: list[RiskReason] = []
@@ -49,19 +70,28 @@ class HealthFraudDetectionAgent:
             policy_beneficiary=self._policy_beneficiary_score(claim, reasons),
         )
 
-        fraud_score = self._weighted_total(component_scores)
-        risk_level = risk_level_for_score(fraud_score)
+        risk_score = self._weighted_total(component_scores)
+        risk_level = risk_level_for_score(
+            risk_score,
+            routine_max=self.settings.routine_review_max_score,
+            elevated_max=self.settings.elevated_review_max_score,
+            high_max=self.settings.high_review_max_score,
+        )
 
         return HealthFraudAssessment(
             claim_id=claim.claim_id,
-            fraud_score=round(fraud_score, 2),
-            risk_level=risk_level,
+            schema_version=self.settings.schema_version,
+            assessment_purpose="HUMAN_REVIEW_DECISION_SUPPORT",
+            risk_score=round(risk_score, 2),
+            risk_tier=risk_level,
             recommended_action=recommended_action_for_level(risk_level),
             confidence_score=self._confidence_score(claim, warnings),
             component_scores=component_scores,
             reasons=sorted(reasons, key=lambda item: item.points, reverse=True),
             warnings=warnings,
             workflow=self._workflow(risk_level),
+            rule_set_version=self.settings.rule_set_version,
+            model_version=None,
         )
 
     def _eligibility_score(self, claim: HealthClaimInput, reasons: list[RiskReason]) -> float:
@@ -152,40 +182,9 @@ class HealthFraudDetectionAgent:
         return min(score, 100)
 
     def _incident_type_score(self, claim: HealthClaimInput, reasons: list[RiskReason]) -> float:
-        score = 0.0
-        if claim.cause_of_loss in self.HIGH_RISK_CAUSES:
-            score += 70
-            self._add_reason(
-                reasons,
-                "HIGH_RISK_CAUSE_OF_LOSS",
-                f"{claim.cause_of_loss.value} is configured as a high-risk health claim cause.",
-                RiskLevel.HIGH,
-                70,
-                "incident_type",
-            )
-        elif claim.cause_of_loss in self.MEDIUM_RISK_CAUSES:
-            score += 35
-            self._add_reason(
-                reasons,
-                "MEDIUM_RISK_CAUSE_OF_LOSS",
-                f"{claim.cause_of_loss.value} is configured as a medium-risk health claim cause.",
-                RiskLevel.MEDIUM,
-                35,
-                "incident_type",
-            )
-
-        if claim.claim_type in {ClaimType.IN_PATIENT, ClaimType.HOSPITAL} and claim.claim_amount >= 5000:
-            score += 20
-            self._add_reason(
-                reasons,
-                "HIGH_VALUE_HOSPITAL_CLAIM",
-                "Hospital or inpatient claim has a high claimed amount.",
-                RiskLevel.MEDIUM,
-                20,
-                "incident_type",
-            )
-
-        return min(score, 100)
+        # A service type or high amount is not suspicious by itself. This component
+        # stays neutral until clinically reviewed, effective-dated edits are added.
+        return 0.0
 
     def _document_score(
         self,
@@ -209,28 +208,10 @@ class HealthFraudDetectionAgent:
             required_missing.append("reports/test results")
 
         if required_missing:
-            points = min(25 + len(required_missing) * 15, 85)
-            score += points
-            self._add_reason(
-                reasons,
-                "MISSING_SUPPORTING_DOCUMENTS",
-                f"Missing required supporting documents: {', '.join(required_missing)}.",
-                RiskLevel.MEDIUM if points < 60 else RiskLevel.HIGH,
-                points,
-                "document_validation",
-            )
+            warnings.append(f"Missing supporting documents: {', '.join(required_missing)}.")
 
         if documents.low_resolution_image:
-            score += 30
             warnings.append("At least one uploaded evidence image is low resolution.")
-            self._add_reason(
-                reasons,
-                "LOW_RESOLUTION_EVIDENCE",
-                "Evidence contains a low-resolution image.",
-                RiskLevel.MEDIUM,
-                30,
-                "document_validation",
-            )
 
         if documents.duplicate_document_found:
             score += 80
@@ -322,12 +303,15 @@ class HealthFraudDetectionAgent:
                 "provider_network",
             )
 
-        if claim.provider_claims_last_90_days > 50:
+        if (
+            claim.provider_peer_volume_percentile is not None
+            and claim.provider_peer_volume_percentile >= 99
+        ):
             score += 35
             self._add_reason(
                 reasons,
-                "PROVIDER_CLAIM_VOLUME_SPIKE",
-                "Provider claim volume is unusually high in the last 90 days.",
+                "PROVIDER_PEER_VOLUME_OUTLIER",
+                "Provider volume is at or above the 99th percentile of its supplied peer group.",
                 RiskLevel.MEDIUM,
                 35,
                 "provider_network",
@@ -355,17 +339,6 @@ class HealthFraudDetectionAgent:
                 "provider_network",
             )
 
-        if claim.demographic_mismatch:
-            score += 60
-            self._add_reason(
-                reasons,
-                "DEMOGRAPHIC_MISMATCH",
-                "Patient demographics are inconsistent with claimed treatment.",
-                RiskLevel.HIGH,
-                60,
-                "provider_network",
-            )
-
         return min(score, 100)
 
     def _policy_beneficiary_score(self, claim: HealthClaimInput, reasons: list[RiskReason]) -> float:
@@ -384,7 +357,7 @@ class HealthFraudDetectionAgent:
         beneficiary_recent = claim.newly_added_beneficiary or self._recent_before_claim(
             claim.beneficiary_added_date, claim.date_of_loss, 30
         )
-        if beneficiary_recent and claim.claim_amount >= 3000:
+        if beneficiary_recent and claim.claim_amount >= self.settings.high_value_beneficiary_threshold:
             score += 75
             self._add_reason(
                 reasons,
@@ -413,7 +386,7 @@ class HealthFraudDetectionAgent:
 
     def _weighted_total(self, scores: ComponentScores) -> float:
         total = 0.0
-        for component, weight in self.COMPONENT_WEIGHTS.items():
+        for component, weight in self.settings.component_weights.items():
             total += getattr(scores, component) * weight
         return max(0.0, min(total, 100.0))
 
@@ -433,13 +406,11 @@ class HealthFraudDetectionAgent:
 
     def _workflow(self, risk_level: RiskLevel) -> list[ClaimWorkflowStep]:
         status = "COMPLETED" if risk_level == RiskLevel.LOW else "REVIEW_REQUIRED"
-        if risk_level == RiskLevel.VERY_HIGH:
-            status = "BLOCKED"
         return [
             ClaimWorkflowStep(
-                name="Search Policyholder",
+                name="Search Member",
                 status="COMPLETED",
-                notes="Policyholder and policy context accepted for scoring.",
+                notes="Member and benefit-plan context accepted for scoring.",
             ),
             ClaimWorkflowStep(
                 name="Validate Policy Eligibility",
@@ -457,9 +428,9 @@ class HealthFraudDetectionAgent:
                 notes="Required health documents and document-date consistency evaluated.",
             ),
             ClaimWorkflowStep(
-                name="Coverage & Fraud Validation",
+                name="Coverage & FWA Risk Assessment",
                 status=status,
-                notes="Rules fused into final explainable fraud score.",
+                notes="Rules combined into an explainable review-priority score.",
             ),
             ClaimWorkflowStep(
                 name="Provide Next Actions",
@@ -482,13 +453,15 @@ class HealthFraudDetectionAgent:
         severity: RiskLevel,
         points: float,
         component: str,
+        evidence_refs: list[str] | None = None,
     ) -> None:
         reasons.append(
             RiskReason(
                 code=code,
                 message=message,
-                severity=severity,
+                severity=ReasonSeverity[severity.name],
                 points=round(points, 2),
                 component=component,
+                evidence_refs=evidence_refs or self.EVIDENCE_REFS.get(code, []),
             )
         )

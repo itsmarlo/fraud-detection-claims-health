@@ -1,6 +1,17 @@
-# Health Fraud Detection Agent
+# Healthcare FWA Review-Prioritization Service
 
-This repository contains an explainable FastAPI prototype for health insurance claim fraud detection. It implements deterministic fraud indicators for health claims and returns a final score, risk level, component scores, reasons, warnings, confidence, workflow status, and recommended next actions.
+This repository contains an explainable FastAPI prototype for healthcare fraud,
+waste, and abuse (FWA) review prioritization. It is a decision-support service:
+it ranks claims, explains triggered rules, and points reviewers to the source
+fields. It does not deny care or reimbursement, or determine that a member or
+provider committed fraud.
+
+Development follows a rules-first vertical slice: validated contracts,
+deterministic rules, evidence quality, entity/network context, and only then
+calibrated ML or bounded LLM extraction. The current prototype is in the first
+phase; it has no production ML or LLM dependency. See
+[`docs/DEVELOPMENT_PATTERN.md`](docs/DEVELOPMENT_PATTERN.md) for the enforced
+guardrails and next-stage gates.
 
 ## Claim Flow
 
@@ -19,7 +30,7 @@ Customer Requests Claim Creation
   -> Provide Next Actions
 ```
 
-## Implemented Fraud Indicators
+## Implemented Review Signals
 
 - Early claim after policy purchase:
   - `< 30 days`: high risk
@@ -29,13 +40,12 @@ Customer Requests Claim Creation
   - `0-1 claims`: low risk
   - `2-3 claims`: medium risk
   - `> 3 claims`: high risk
-- High-risk cause-of-loss and claim-type scoring.
 - Duplicate health documents and reused invoices/prescriptions.
 - Document date mismatch:
   - Medical report date not equal to treatment date.
   - Admission date after discharge date.
   - Treatment before policy inception.
-- Missing supporting documents:
+- Missing supporting documents reduce confidence rather than increasing risk:
   - Hospital bill.
   - Discharge summary.
   - Prescription.
@@ -44,16 +54,19 @@ Customer Requests Claim Creation
   - Low-resolution image warning.
 - Suspicious hospital or doctor repetition.
 - Newly added beneficiary or recent policy modification with an immediate high-value claim.
-- Rule coverage for:
+- Explainable rule coverage for:
   - `EARLY_CLAIM_AFTER_POLICY_START`
   - `MULTIPLE_ACTIVE_POLICIES`
   - `EXCESSIVE_CLAIM_FREQUENCY`
   - `CLAIM_AFTER_COVERAGE_UPGRADE`
-  - `DEMOGRAPHIC_MISMATCH`
+
+Service type, claim cost, and patient demographics are not treated as FWA
+signals by themselves.
 
 ## Scoring
 
-The agent combines these components into a final `fraud_score` from 0 to 100:
+The agent combines these prototype components into a `risk_score` from 0 to
+100. The score prioritizes human review; it is not a fraud determination.
 
 | Component | Weight |
 |---|---:|
@@ -68,10 +81,17 @@ Risk levels:
 
 | Score | Risk level | Action |
 |---:|---|---|
-| `0-30` | `LOW` | Auto-adjudicate or continue normal payment workflow. |
-| `31-60` | `MEDIUM` | Pend for claims analyst review. |
-| `61-80` | `HIGH` | Request medical records or provider clarification before payment. |
-| `81-100` | `VERY_HIGH` | Suspend payment and refer to SIU/compliance. |
+| `0-30` | `ROUTINE_REVIEW_PRIORITY` | Continue standard processing and routine controls. |
+| `31-60` | `ELEVATED_REVIEW_PRIORITY` | Route to a payment-integrity analyst. |
+| `61-80` | `HIGH_REVIEW_PRIORITY` | Prioritize review and gather supporting evidence. |
+| `81-100` | `URGENT_REVIEW_PRIORITY` | Prioritize SIU/compliance review; no adverse action without human determination. |
+
+Risk and confidence are separate. Missing or unprocessable evidence lowers
+`confidence_score`; it does not prove fraud. Every risk reason includes
+`evidence_refs`, and responses include schema and rule-set versions. Component
+weights, review thresholds, and selected monetary thresholds are environment
+configuration; the defaults remain prototype hypotheses requiring domain and
+prospective validation.
 
 ## Run Locally
 
@@ -79,8 +99,13 @@ Risk levels:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 uvicorn app.main:app --reload
 ```
+
+Application metadata, browser origins, fraud component weights, and high-value
+claim thresholds are configured through `.env`. Keep local secrets in `.env`;
+commit only `.env.example`.
 
 Useful URLs:
 
@@ -90,7 +115,7 @@ Useful URLs:
 ## Example Request
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/claims/score \
+curl -X POST http://localhost:8000/api/v1/healthcare-claims/assess \
   -H "Content-Type: application/json" \
   -d @docs/example-health-claim.json
 ```
@@ -101,6 +126,13 @@ Run tests:
 pytest
 ```
 
+## Bruno API Collection
+
+Open `bruno/health-fraud-detection-api` in Bruno and select `local` while the
+Uvicorn server is running. The collection includes the health check plus
+high-risk and low-risk claim-scoring requests with response assertions. Select
+`btp` and set its `BASE_URL` after deploying to Cloud Foundry.
+
 ## Deploy to SAP BTP Cloud Foundry
 
 After logging in and targeting the intended organization and space:
@@ -109,5 +141,8 @@ After logging in and targeting the intended organization and space:
 cf push
 ```
 
-The deployment uses `manifest.yml`, starts the FastAPI service on the Cloud
-Foundry-provided port, and checks application health through `/health`.
+The deployment uses `manifest.yml`, the Python buildpack, environment-specific
+configuration, the Cloud Foundry-provided port, and the `/health` health check.
+
+The older `POST /api/v1/claims/score` path remains as a hidden compatibility
+route. New integrations should use `POST /api/v1/healthcare-claims/assess`.

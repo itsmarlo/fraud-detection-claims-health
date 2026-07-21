@@ -1,0 +1,54 @@
+meta {
+  name: Score Low-Risk Claim
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/healthcare-claims/assess
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "claim_id": "CLM-LOW-1001",
+    "policy_id": "POL-LOW-1001",
+    "member_id": "MBR-LOW-1001",
+    "provider_id": "NPI-LOW-1001",
+    "claim_type": "OUT_PATIENT",
+    "cause_of_loss": "ROUTINE_CONSULTATION",
+    "claim_amount": 250,
+    "billed_amount": 300,
+    "allowed_amount": 200,
+    "policy_start_date": "2025-01-01",
+    "policy_end_date": "2027-12-31",
+    "date_of_loss": "2026-05-01",
+    "claim_submission_date": "2026-05-02",
+    "previous_claims_last_12_months": 0,
+    "active_policy_count": 1,
+    "provider_claims_last_90_days": 5,
+    "provider_suspicious_claims_last_12_months": 0,
+    "same_doctor_or_hospital_claims_last_12_months": 1,
+    "patient_age": 35,
+    "patient_gender": "F",
+    "diagnosis_codes": ["Z00.0"],
+    "procedure_codes": ["99213"],
+    "documents": {
+      "hospital_bill": true
+    }
+  }
+}
+
+tests {
+  test("low-risk claim is scored", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().claim_id).to.equal("CLM-LOW-1001");
+    expect(res.getBody().risk_tier).to.equal("ROUTINE_REVIEW_PRIORITY");
+    expect(res.getBody().risk_score).to.be.at.most(30);
+  });
+}

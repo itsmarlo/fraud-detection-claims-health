@@ -20,6 +20,7 @@
   "previous_claims_last_12_months": 4,
   "active_policy_count": 2,
   "provider_claims_last_90_days": 62,
+  "provider_peer_volume_percentile": 99.4,
   "provider_suspicious_claims_last_12_months": 5,
   "same_doctor_or_hospital_claims_last_12_months": 9,
   "patient_age": 42,

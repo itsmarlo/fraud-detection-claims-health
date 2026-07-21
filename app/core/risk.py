@@ -2,27 +2,34 @@ from enum import Enum
 
 
 class RiskLevel(str, Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
-    VERY_HIGH = "VERY_HIGH"
+    LOW = "ROUTINE_REVIEW_PRIORITY"
+    MEDIUM = "ELEVATED_REVIEW_PRIORITY"
+    HIGH = "HIGH_REVIEW_PRIORITY"
+    VERY_HIGH = "URGENT_REVIEW_PRIORITY"
 
 
-def risk_level_for_score(score: float) -> RiskLevel:
-    if score <= 30:
+def risk_level_for_score(
+    score: float,
+    routine_max: float = 30,
+    elevated_max: float = 60,
+    high_max: float = 80,
+) -> RiskLevel:
+    if score <= routine_max:
         return RiskLevel.LOW
-    if score <= 60:
+    if score <= elevated_max:
         return RiskLevel.MEDIUM
-    if score <= 80:
+    if score <= high_max:
         return RiskLevel.HIGH
     return RiskLevel.VERY_HIGH
 
 
 def recommended_action_for_level(level: RiskLevel) -> str:
     actions = {
-        RiskLevel.LOW: "Auto-adjudicate or continue normal payment workflow.",
-        RiskLevel.MEDIUM: "Pend for claims analyst review.",
-        RiskLevel.HIGH: "Request medical records or provider clarification before payment.",
-        RiskLevel.VERY_HIGH: "Suspend payment and refer to SIU/compliance.",
+        RiskLevel.LOW: "Continue standard processing and routine controls.",
+        RiskLevel.MEDIUM: "Route to a payment-integrity analyst for review.",
+        RiskLevel.HIGH: "Prioritize for payment-integrity review and gather supporting evidence.",
+        RiskLevel.VERY_HIGH: (
+            "Prioritize for SIU/compliance review; do not take adverse action without a human determination."
+        ),
     }
     return actions[level]

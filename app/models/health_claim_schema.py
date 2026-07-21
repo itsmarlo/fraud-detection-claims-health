@@ -26,6 +26,13 @@ class CauseOfLoss(str, Enum):
     OTHER = "OTHER"
 
 
+class ReasonSeverity(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    VERY_HIGH = "VERY_HIGH"
+
+
 class DocumentValidationInput(BaseModel):
     hospital_bill: bool = False
     discharge_summary: bool = False
@@ -72,6 +79,7 @@ class HealthClaimInput(BaseModel):
     previous_claims_last_12_months: int = Field(0, ge=0)
     active_policy_count: int = Field(1, ge=1)
     provider_claims_last_90_days: int = Field(0, ge=0)
+    provider_peer_volume_percentile: float | None = Field(None, ge=0, le=100)
     provider_suspicious_claims_last_12_months: int = Field(0, ge=0)
     same_doctor_or_hospital_claims_last_12_months: int = Field(0, ge=0)
 
@@ -83,7 +91,11 @@ class HealthClaimInput(BaseModel):
     place_of_service: str | None = None
 
     treatment_before_policy_inception: bool = False
-    demographic_mismatch: bool = False
+    demographic_mismatch: bool = Field(
+        False,
+        deprecated=True,
+        description="Accepted for compatibility but deliberately excluded from risk scoring.",
+    )
     diagnosis_procedure_mismatch: bool = False
     provider_specialty_mismatch: bool = False
     high_value_claim: bool = False
@@ -109,9 +121,10 @@ class HealthClaimInput(BaseModel):
 class RiskReason(BaseModel):
     code: str
     message: str
-    severity: RiskLevel
+    severity: ReasonSeverity
     points: float
     component: str
+    evidence_refs: list[str] = Field(default_factory=list)
 
 
 class ComponentScores(BaseModel):
@@ -125,17 +138,21 @@ class ComponentScores(BaseModel):
 
 class ClaimWorkflowStep(BaseModel):
     name: str
-    status: Literal["COMPLETED", "REVIEW_REQUIRED", "BLOCKED"]
+    status: Literal["COMPLETED", "REVIEW_REQUIRED"]
     notes: str
 
 
 class HealthFraudAssessment(BaseModel):
     claim_id: str
-    fraud_score: float
-    risk_level: RiskLevel
+    schema_version: str
+    assessment_purpose: Literal["HUMAN_REVIEW_DECISION_SUPPORT"]
+    risk_score: float
+    risk_tier: RiskLevel
     recommended_action: str
     confidence_score: float
     component_scores: ComponentScores
     reasons: list[RiskReason]
     warnings: list[str]
     workflow: list[ClaimWorkflowStep]
+    rule_set_version: str
+    model_version: str | None = None
