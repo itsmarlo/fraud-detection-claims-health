@@ -28,6 +28,16 @@ class HealthFraudDetectionAgent:
         "EXCESSIVE_CLAIM_FREQUENCY": ["claim.previous_claims_last_12_months"],
         "MULTIPLE_ACTIVE_POLICIES": ["claim.active_policy_count"],
         "DUPLICATE_HEALTH_DOCUMENT": ["documents.duplicate_document_found"],
+        "DOCUMENT_AMOUNT_MISMATCH": [
+            "claim.billed_amount",
+            "uploaded_documents.hospital_bill.extracted_amounts",
+        ],
+        "DOCUMENT_IDENTIFIER_MISMATCH": [
+            "claim.claim_id",
+            "claim.member_id",
+            "claim.provider_id",
+            "uploaded_documents.extracted_identifiers",
+        ],
         "DOCUMENT_DATE_MISMATCH": ["documents.medical_report_date", "documents.treatment_date"],
         "INVALID_ADMISSION_DISCHARGE_DATES": [
             "documents.admission_date",
@@ -70,7 +80,9 @@ class HealthFraudDetectionAgent:
             policy_beneficiary=self._policy_beneficiary_score(claim, reasons),
         )
 
-        risk_score = self._weighted_total(component_scores)
+        risk_score = self._apply_document_review_floor(
+            self._weighted_total(component_scores), reasons
+        )
         risk_level = risk_level_for_score(
             risk_score,
             routine_max=self.settings.routine_review_max_score,
@@ -221,6 +233,28 @@ class HealthFraudDetectionAgent:
                 "Duplicate invoice, prescription, or medical document was detected.",
                 RiskLevel.HIGH,
                 80,
+                "document_validation",
+            )
+
+        if documents.document_amount_mismatch:
+            score += 55
+            self._add_reason(
+                reasons,
+                "DOCUMENT_AMOUNT_MISMATCH",
+                "A clearly labelled uploaded bill total does not match the supplied billed amount.",
+                RiskLevel.HIGH,
+                55,
+                "document_validation",
+            )
+
+        if documents.document_identifier_mismatch:
+            score += 70
+            self._add_reason(
+                reasons,
+                "DOCUMENT_IDENTIFIER_MISMATCH",
+                "An identifier or evidence date extracted from an uploaded document conflicts with the claim.",
+                RiskLevel.HIGH,
+                70,
                 "document_validation",
             )
 
@@ -389,6 +423,22 @@ class HealthFraudDetectionAgent:
         for component, weight in self.settings.component_weights.items():
             total += getattr(scores, component) * weight
         return max(0.0, min(total, 100.0))
+
+    def _apply_document_review_floor(
+        self, risk_score: float, reasons: list[RiskReason]
+    ) -> float:
+        """Prevent strong document anomalies from being diluted into routine review."""
+        review_floor_codes = {
+            "DUPLICATE_HEALTH_DOCUMENT",
+            "DOCUMENT_AMOUNT_MISMATCH",
+            "DOCUMENT_IDENTIFIER_MISMATCH",
+            "DOCUMENT_DATE_MISMATCH",
+            "INVALID_ADMISSION_DISCHARGE_DATES",
+            "TREATMENT_BEFORE_POLICY_INCEPTION",
+        }
+        if any(reason.code in review_floor_codes for reason in reasons):
+            return max(risk_score, self.settings.routine_review_max_score + 0.01)
+        return risk_score
 
     def _confidence_score(self, claim: HealthClaimInput, warnings: list[str]) -> float:
         confidence = 100.0

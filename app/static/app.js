@@ -1,6 +1,13 @@
 const byId = (id) => document.getElementById(id);
 const form = byId("claim-form");
 const submitButton = form.querySelector("button[type='submit']");
+const uploadFields = [
+  "hospital_bill_file",
+  "discharge_summary_file",
+  "prescription_file",
+  "medical_report_file",
+  "lab_or_test_results_file",
+];
 
 const componentNames = {
   eligibility: "Eligibility",
@@ -46,10 +53,11 @@ function buildPayload() {
     newly_added_beneficiary: checked("newly_added_beneficiary"),
     high_value_claim: numberValue("claim_amount") >= 3000,
     documents: {
-      hospital_bill: checked("hospital_bill"),
-      discharge_summary: checked("discharge_summary"),
-      medical_report: checked("medical_report"),
-      lab_or_test_results: checked("lab_or_test_results"),
+      hospital_bill: checked("hospital_bill") || Boolean(byId("hospital_bill_file").files[0]),
+      discharge_summary: checked("discharge_summary") || Boolean(byId("discharge_summary_file").files[0]),
+      prescription: Boolean(byId("prescription_file").files[0]),
+      medical_report: checked("medical_report") || Boolean(byId("medical_report_file").files[0]),
+      lab_or_test_results: checked("lab_or_test_results") || Boolean(byId("lab_or_test_results_file").files[0]),
       duplicate_document_found: checked("duplicate_document_found"),
       low_resolution_image: checked("low_resolution_image"),
       treatment_date: optionalDate("treatment_date"),
@@ -124,6 +132,33 @@ function renderWarnings(warnings) {
   warnings.forEach((warning) => list.append(element("li", "", warning)));
 }
 
+function renderDocumentFindings(findings = []) {
+  const section = byId("documents-section");
+  const list = byId("document-list");
+  clearNode(list);
+  section.classList.toggle("hidden", !findings.length);
+  byId("document-count").textContent = `${findings.length} ${findings.length === 1 ? "file" : "files"}`;
+  findings.forEach((finding) => {
+    const card = element("article", "document-finding");
+    const heading = element("div", "document-finding-head");
+    const title = element("div");
+    title.append(element("strong", "", finding.filename), element("span", "", finding.role));
+    heading.append(title, element("span", `analysis-status ${finding.status === "ANALYZED" ? "complete" : "limited"}`, finding.status.replace("_", " ")));
+    card.append(heading);
+    const meta = element("p", "document-meta", `${finding.media_type} · ${Math.max(1, Math.round(finding.size_bytes / 1024))} KB · fingerprint ${finding.fingerprint}`);
+    card.append(meta);
+    if (finding.signals.length) {
+      const signals = element("ul", "finding-signals");
+      finding.signals.forEach((signal) => signals.append(element("li", "", signal)));
+      card.append(signals);
+    }
+    if (finding.extracted_amounts.length) card.append(element("p", "finding-detail", `Extracted totals: ${finding.extracted_amounts.join(", ")}`));
+    Object.entries(finding.extracted_dates).forEach(([label, date]) => card.append(element("p", "finding-detail", `${label.replaceAll("_", " ")}: ${date}`)));
+    finding.notes.forEach((note) => card.append(element("p", "finding-note", note)));
+    list.append(card);
+  });
+}
+
 function renderAssessment(result) {
   byId("empty-result").classList.add("hidden");
   byId("error-state").classList.add("hidden");
@@ -147,6 +182,7 @@ function renderAssessment(result) {
   renderReasons(result.reasons);
   renderComponents(result.component_scores);
   renderWarnings(result.warnings);
+  renderDocumentFindings(result.document_findings);
   if (window.innerWidth < 1080) byId("result-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -163,11 +199,24 @@ form.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.firstElementChild.textContent = "Assessing…";
   try {
-    const response = await fetch("/api/v1/healthcare-claims/assess", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildPayload()),
-    });
+    const payload = buildPayload();
+    const hasDocuments = uploadFields.some((id) => byId(id).files.length);
+    let response;
+    if (hasDocuments) {
+      const body = new FormData();
+      body.append("claim_json", JSON.stringify(payload));
+      uploadFields.forEach((id) => {
+        const file = byId(id).files[0];
+        if (file) body.append(id, file);
+      });
+      response = await fetch("/api/v1/healthcare-claims/assess-with-documents", { method: "POST", body });
+    } else {
+      response = await fetch("/api/v1/healthcare-claims/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
     const result = await response.json();
     if (!response.ok) {
       const details = Array.isArray(result.detail) ? result.detail.map((item) => item.msg).join(" ") : result.detail;
@@ -212,6 +261,7 @@ function loadSample(sample) {
     if (input.type === "checkbox") input.checked = sampleValue;
     else input.value = sampleValue;
   });
+  uploadFields.forEach((id) => { byId(id).value = ""; });
   byId("assessment").classList.add("hidden");
   byId("error-state").classList.add("hidden");
   byId("empty-result").classList.remove("hidden");

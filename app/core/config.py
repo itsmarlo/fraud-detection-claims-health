@@ -9,10 +9,11 @@ class Settings(BaseSettings):
 
     app_name: str = "Health Fraud Detection Agent"
     app_env: str = "local"
-    app_version: str = "0.1.0"
-    schema_version: str = "health-claim-assessment-1.0.0"
-    rule_set_version: str = "health-fwa-rules-1.0.0"
+    app_version: str = "0.2.0"
+    schema_version: str = "health-claim-assessment-1.1.0"
+    rule_set_version: str = "health-fwa-rules-1.1.0"
     cors_origins: str = "*"
+    max_document_size_mb: int = Field(default=10, ge=1, le=25)
 
     eligibility_weight: float = Field(default=0.20, ge=0, le=1)
     member_history_weight: float = Field(default=0.18, ge=0, le=1)

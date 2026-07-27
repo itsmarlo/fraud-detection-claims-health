@@ -1,0 +1,35 @@
+cd /Users/marla.alschweiki/Documents/GitHub/fraud-detection-claims
+source .venv/bin/activate
+python -m app.ml.train_model
+uvicorn app.main:app --reload
+
+
+http://127.0.0.1:8000/demo
+
+
+source .venv/bin/activate
+python - <<'PY'
+from app.core.config import get_settings
+s = get_settings()
+print("ENABLE_LLM_ENCODER:", s.enable_llm_encoder)
+print("LLM_PROVIDER:", s.llm_provider)
+print("AICORE_BASE_URL:", s.aicore_base_url)
+print("ORCH_DEPLOYMENT_URL:", bool(s.orch_deployment_url))
+print("OPENAI_API_KEY_SET:", bool(s.openai_api_key))
+
+
+cf push
+cf app fraud-detection-claims-api
+cf logs fraud-detection-claims-api --recent
+
+
+11WDx&C@rlo2026!
+
+P2012867095
+
+
+cf logout
+
+cf login \
+  -a https://api.cf.eu10-004.hana.ondemand.com \
+  -u P2012867095

@@ -72,7 +72,26 @@ def test_document_validation_detects_duplicates_and_invalid_dates():
     assert "DUPLICATE_HEALTH_DOCUMENT" in codes
     assert "INVALID_ADMISSION_DISCHARGE_DATES" in codes
     assert assessment.component_scores.document_validation == 100
+    assert assessment.risk_tier != RiskLevel.LOW
     assert all(reason.evidence_refs for reason in assessment.reasons)
+
+
+def test_document_content_mismatches_are_explainable_risk_signals():
+    claim = base_claim(
+        documents=DocumentValidationInput(
+            hospital_bill=True,
+            document_amount_mismatch=True,
+            document_identifier_mismatch=True,
+        )
+    )
+
+    assessment = HealthFraudDetectionAgent().assess(claim)
+
+    codes = {reason.code for reason in assessment.reasons}
+    assert "DOCUMENT_AMOUNT_MISMATCH" in codes
+    assert "DOCUMENT_IDENTIFIER_MISMATCH" in codes
+    assert assessment.component_scores.document_validation == 100
+    assert assessment.risk_tier != RiskLevel.LOW
 
 
 def test_policy_and_beneficiary_risk_rules():

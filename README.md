@@ -113,6 +113,35 @@ Useful URLs:
 - Swagger UI: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
 
+## Document-Aware Assessment
+
+The review console accepts PDF, PNG, and JPEG supporting evidence up to 10 MB
+per file. Files are inspected in memory and discarded after the request. The
+prototype checks file integrity, exact document reuse, image resolution,
+machine-readable PDF identifiers, labelled totals, and supported clinical
+dates. Extracted findings feed the same explainable human-review rules; they do
+not establish fraud or trigger an automated adverse action.
+
+High-severity document inconsistencies apply an elevated-review floor so they
+cannot be diluted into routine processing by otherwise neutral components. The
+underlying component score and evidence references remain visible to reviewers.
+
+For API clients, send `claim_json` plus any of these multipart fields to
+`POST /api/v1/healthcare-claims/assess-with-documents`:
+
+- `hospital_bill_file`
+- `discharge_summary_file`
+- `prescription_file`
+- `medical_report_file`
+- `lab_or_test_results_file`
+
+Scanned PDFs and images receive integrity and resolution checks. OCR is not
+enabled in this prototype, so their textual analysis is reported as limited.
+Only short SHA-256 fingerprints are kept in the running process to identify
+exact reuse; this memory resets when the app restarts. Use synthetic evidence
+until production authentication, malware scanning, encrypted storage, audit,
+and retention controls are in place.
+
 ## Example Request
 
 ```bash

@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Explainable healthcare FWA claim review console.">
     <title>Claim Review Console</title>
-    <link rel="stylesheet" href="/static/fiori.css">
+    <link rel="icon" href="/static/sap-fioneer-logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/fiori.css?v=20260723">
   </head>
   <body>
+    <a class="skip-link" href="#claim-form">Skip to claim assessment</a>
     <header class="topbar">
       <a class="brand" href="/" aria-label="Claim Review Console home">
         <img class="brand-logo" src="/static/sap-fioneer-logo.svg" alt="SAP Fioneer">
@@ -16,20 +18,16 @@
           <strong>Payment Integrity</strong>
           <small>FWA Review Workspace</small>
         </span>
-        <span class="prototype-badge">Prototype</span>
       </a>
       <div class="shell-actions">
-        <div class="service-state"><span class="state-dot"></span> Rules service ready</div>
-        <span class="shell-divider"></span>
-        <button class="shell-button" type="button" aria-label="Notifications">●</button>
-        <span class="user-avatar" aria-label="Current user">MA</span>
+        <div class="service-state" role="status"><span class="state-dot" aria-hidden="true"></span>Rules service ready</div>
       </div>
     </header>
 
     <main>
       <section class="intro">
         <div>
-          <p class="eyebrow">Payment Integrity / Claim Review</p>
+          <nav class="breadcrumbs" aria-label="Breadcrumb"><span>Payment Integrity</span><span aria-hidden="true">/</span><strong>Claim Review</strong></nav>
           <h1>Healthcare Claim Assessment</h1>
           <p class="lede">Evaluate a claim with explainable rules and trace each review signal to its source field.</p>
           <div class="object-meta"><span>Rules-based assessment</span><span>Human review workflow</span><span>Versioned evidence</span></div>
@@ -43,7 +41,7 @@
       <section class="workspace">
         <article class="panel input-panel">
           <div class="panel-head">
-            <div><p class="step">Claim context</p><h2>Assessment Input</h2></div>
+            <div><h2>Assessment input</h2></div>
             <div class="preset-group" aria-label="Sample claims">
               <button class="quiet-button" type="button" id="routine-sample">Routine sample</button>
               <button class="quiet-button" type="button" id="priority-sample">Priority sample</button>
@@ -58,8 +56,8 @@
                 <label>Member ID<input id="member_id" required minlength="3" value="MBR-1234"></label>
                 <label>Provider ID<input id="provider_id" required minlength="3" value="NPI-456789"></label>
                 <label>Policy ID<input id="policy_id" required minlength="3" value="POL-9001"></label>
-                <label>Claim type<select id="claim_type"><option>OUT_PATIENT</option><option>IN_PATIENT</option><option>DENTAL</option><option selected>HOSPITAL</option></select></label>
-                <label>Service category<select id="cause_of_loss"><option>ROUTINE_CONSULTATION</option><option selected>ELECTIVE_PROCEDURE</option><option>EMERGENCY_TREATMENT</option><option>CHRONIC_CONDITION</option><option>DIAGNOSTIC_TEST</option><option>PHARMACY</option><option>DENTAL_TREATMENT</option><option>OTHER</option></select></label>
+                <label>Claim type<select id="claim_type"><option value="OUT_PATIENT">Outpatient</option><option value="IN_PATIENT">Inpatient</option><option value="DENTAL">Dental</option><option value="HOSPITAL" selected>Hospital</option></select></label>
+                <label>Service category<select id="cause_of_loss"><option value="ROUTINE_CONSULTATION">Routine consultation</option><option value="ELECTIVE_PROCEDURE" selected>Elective procedure</option><option value="EMERGENCY_TREATMENT">Emergency treatment</option><option value="CHRONIC_CONDITION">Chronic condition</option><option value="DIAGNOSTIC_TEST">Diagnostic test</option><option value="PHARMACY">Pharmacy</option><option value="DENTAL_TREATMENT">Dental treatment</option><option value="OTHER">Other</option></select></label>
               </div>
             </fieldset>
 
@@ -112,6 +110,19 @@
               </div>
             </fieldset>
 
+            <fieldset>
+              <legend>Upload supporting documents</legend>
+              <p class="field-help">PDF, PNG, or JPEG · maximum 10 MB each · processed for this assessment and not stored</p>
+              <div class="upload-grid">
+                <label class="upload-card"><span>Hospital bill</span><small>Totals, identifiers, dates, reuse</small><input id="hospital_bill_file" type="file" accept="application/pdf,image/png,image/jpeg"></label>
+                <label class="upload-card"><span>Discharge summary</span><small>Admission and discharge dates</small><input id="discharge_summary_file" type="file" accept="application/pdf,image/png,image/jpeg"></label>
+                <label class="upload-card"><span>Prescription</span><small>Integrity, quality, exact reuse</small><input id="prescription_file" type="file" accept="application/pdf,image/png,image/jpeg"></label>
+                <label class="upload-card"><span>Medical report</span><small>Report and treatment dates</small><input id="medical_report_file" type="file" accept="application/pdf,image/png,image/jpeg"></label>
+                <label class="upload-card"><span>Test results</span><small>Integrity, quality, exact reuse</small><input id="lab_or_test_results_file" type="file" accept="application/pdf,image/png,image/jpeg"></label>
+              </div>
+              <div class="privacy-note"><strong>Sensitive evidence:</strong> use synthetic documents in this prototype. Findings prioritize human review and do not establish fraud.</div>
+            </fieldset>
+
             <div class="form-actions">
               <button class="primary-button" type="submit"><span>Run assessment</span><span aria-hidden="true">→</span></button>
               <p>Deterministic rules · no external AI required</p>
@@ -156,6 +167,11 @@
               <div class="section-title"><h3>Evidence warnings</h3></div>
               <ul class="warning-list" id="warning-list"></ul>
             </section>
+
+            <section class="result-section hidden" id="documents-section">
+              <div class="section-title"><h3>Uploaded document analysis</h3><span id="document-count">0 files</span></div>
+              <div class="document-list" id="document-list"></div>
+            </section>
           </div>
 
           <div class="error-state hidden" id="error-state"><strong>Assessment could not be completed</strong><p id="error-message"></p></div>
@@ -164,6 +180,6 @@
     </main>
 
     <footer><span>FWA Review Console</span><span>Decision support · Human review required</span></footer>
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=20260723" defer></script>
   </body>
 </html>

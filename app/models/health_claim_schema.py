@@ -43,6 +43,8 @@ class DocumentValidationInput(BaseModel):
     referral: bool = False
     low_resolution_image: bool = False
     duplicate_document_found: bool = False
+    document_amount_mismatch: bool = False
+    document_identifier_mismatch: bool = False
     doctor_name: str | None = None
     hospital_name: str | None = None
     invoice_number: str | None = None
@@ -142,6 +144,19 @@ class ClaimWorkflowStep(BaseModel):
     notes: str
 
 
+class UploadedDocumentFinding(BaseModel):
+    role: str
+    filename: str
+    media_type: str
+    size_bytes: int
+    fingerprint: str
+    status: Literal["ANALYZED", "LIMITED_ANALYSIS"]
+    extracted_dates: dict[str, date] = Field(default_factory=dict)
+    extracted_amounts: list[float] = Field(default_factory=list)
+    signals: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class HealthFraudAssessment(BaseModel):
     claim_id: str
     schema_version: str
@@ -153,6 +168,7 @@ class HealthFraudAssessment(BaseModel):
     component_scores: ComponentScores
     reasons: list[RiskReason]
     warnings: list[str]
+    document_findings: list[UploadedDocumentFinding] = Field(default_factory=list)
     workflow: list[ClaimWorkflowStep]
     rule_set_version: str
     model_version: str | None = None
